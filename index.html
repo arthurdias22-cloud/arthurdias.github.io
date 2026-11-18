@@ -1,0 +1,2246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sonic Runner - Green Hill</title>
+    <!-- Tailwind CSS para HUD e interfaces responsivas -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fontes retrô e modernas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Russo+One&family=Inter:wght@600;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .font-arcade {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        .font-title {
+            font-family: 'Russo One', sans-serif;
+        }
+
+        /* Sombras estilo arcade nos textos do HUD */
+        .hud-text {
+            text-shadow: 2px 2px 0px #000, -1px -1px 0px #000, 1px -1px 0px #000, -1px 1px 0px #000;
+        }
+
+        .hud-gold {
+            color: #FFD700;
+            text-shadow: 2px 2px 0px #7c2d12, 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        @keyframes pulseDanger {
+            0%, 100% { color: #ef4444; transform: scale(1); }
+            50% { color: #fca5a5; transform: scale(1.06); }
+        }
+
+        .rings-zero {
+            animation: pulseDanger 0.7s infinite;
+        }
+
+        /* Botões estilizados para o jogo */
+        .sonic-btn {
+            background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%);
+            border: 3px solid #facc15;
+            box-shadow: 0 6px 0 #1e3a8a, 0 10px 20px rgba(0, 0, 0, 0.5);
+            transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+        }
+
+        .sonic-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+
+        .sonic-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #1e3a8a, 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Botões virtuais touch */
+        .touch-pad-btn {
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+            transition: transform 0.06s, background-color 0.06s;
+        }
+
+        .touch-pad-btn.active, .touch-pad-btn:active {
+            background: rgba(37, 99, 235, 0.75);
+            border-color: #facc15;
+            transform: scale(0.92);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas Principal do Jogo -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Superior (Visível durante o jogo) -->
+    <div id="hudLayer" class="hidden fixed top-0 left-0 right-0 z-20 p-3 sm:p-5 flex justify-between items-start pointer-events-none">
+        <!-- Status: Anéis, Pontos, Velocidade -->
+        <div class="flex flex-col gap-1.5 sm:gap-2 bg-slate-900/65 backdrop-blur-md border-2 border-blue-500/60 rounded-2xl px-3.5 py-2.5 sm:px-5 sm:py-3 shadow-xl">
+            <div class="flex items-center gap-3">
+                <span class="font-arcade text-[10px] sm:text-xs hud-gold tracking-wider">ANÉIS</span>
+                <span id="hudRings" class="font-arcade text-sm sm:text-lg text-white hud-text">0</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-arcade text-[10px] sm:text-xs text-sky-300 hud-text tracking-wider">PONTOS</span>
+                <span id="hudScore" class="font-arcade text-sm sm:text-lg text-white hud-text">000000</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-arcade text-[10px] sm:text-xs text-emerald-300 hud-text tracking-wider">VELOCIDADE</span>
+                <div class="w-20 sm:w-28 h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
+                    <div id="hudSpeedBar" class="h-full bg-gradient-to-r from-emerald-400 via-yellow-400 to-red-500 transition-all duration-75" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botões de Ação Rápida (Som e Pausa) -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="btnMute" title="Ativar/Desativar Som" class="p-2.5 sm:p-3 rounded-xl bg-slate-900/75 hover:bg-slate-800 text-white border-2 border-slate-500/70 shadow-lg active:scale-95 transition">
+                <span id="iconSoundOn" class="block">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"></path>
+                    </svg>
+                </span>
+                <span id="iconSoundOff" class="hidden">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-red-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M23 9l-6 6M17 9l6 6"></path>
+                    </svg>
+                </span>
+            </button>
+            <button id="btnPause" title="Pausar Jogo" class="p-2.5 sm:p-3 rounded-xl bg-slate-900/75 hover:bg-slate-800 text-white border-2 border-slate-500/70 shadow-lg active:scale-95 transition">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6 text-sky-300" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Controles Touch na Tela (Visíveis em dispositivos touch ou telas menores) -->
+    <div id="touchControls" class="hidden fixed bottom-4 left-0 right-0 z-20 px-4 sm:px-8 flex justify-between items-end pointer-events-none">
+        <!-- Direcional Esquerda / Direita -->
+        <div class="flex gap-3 pointer-events-auto">
+            <button id="touchLeft" aria-label="Mover para Esquerda" class="touch-pad-btn w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path>
+                </svg>
+            </button>
+            <button id="touchRight" aria-label="Mover para Direita" class="touch-pad-btn w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Botões de Ação: Spin Dash & Pulo -->
+        <div class="flex gap-3 sm:gap-4 pointer-events-auto">
+            <button id="touchDash" aria-label="Spin Dash" class="touch-pad-btn w-16 h-16 sm:w-20 sm:h-20 rounded-full flex flex-col items-center justify-center text-yellow-300 border-yellow-400/60">
+                <span class="font-arcade text-[9px] sm:text-[10px]">SPIN</span>
+                <span class="font-arcade text-[9px] sm:text-[10px]">DASH</span>
+            </button>
+            <button id="touchJump" aria-label="Pular" class="touch-pad-btn w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center text-sky-300 border-sky-400/70">
+                <span class="font-arcade text-xs sm:text-sm">PULO</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tela Inicial (Start Screen) -->
+    <div id="startScreen" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+        <div class="max-w-lg w-full bg-gradient-to-b from-blue-900/95 via-slate-900/95 to-slate-950/95 border-4 border-yellow-400 rounded-3xl p-6 sm:p-8 text-center shadow-2xl relative overflow-hidden">
+            <!-- Faixa decorativa estilo emblema clássico -->
+            <div class="inline-block bg-red-600 text-white font-arcade text-[10px] sm:text-xs px-4 py-1.5 rounded-full border-2 border-yellow-300 shadow-md mb-3">
+                GREEN HILL ZONE • ACT 1
+            </div>
+            
+            <h1 class="font-title text-3xl sm:text-5xl text-white tracking-wide uppercase drop-shadow-[0_4px_0_#1e3a8a]">
+                SONIC <span class="text-yellow-400">RUNNER</span>
+            </h1>
+            <p class="text-sky-200 text-xs sm:text-sm mt-2 font-medium">
+                Corra em alta velocidade, colete anéis dourados e destrua os robôs Badniks!
+            </p>
+
+            <!-- Instruções -->
+            <div class="mt-5 bg-slate-950/70 border border-blue-500/40 rounded-2xl p-4 text-left space-y-2.5 text-xs sm:text-sm text-slate-200">
+                <div class="flex items-center gap-2.5">
+                    <span class="px-2 py-1 bg-blue-600/40 border border-blue-400 rounded-lg font-bold text-yellow-300 text-xs shrink-0">← → / A D</span>
+                    <span>Correr e controlar a velocidade</span>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <span class="px-2 py-1 bg-blue-600/40 border border-blue-400 rounded-lg font-bold text-yellow-300 text-xs shrink-0">↑ / W / ESPAÇO</span>
+                    <span>Pulo Giratório (destrói inimigos ao cair)</span>
+                </div>
+                <div class="flex items-center gap-2.5">
+                    <span class="px-2 py-1 bg-blue-600/40 border border-blue-400 rounded-lg font-bold text-yellow-300 text-xs shrink-0">↓ / S / SHIFT</span>
+                    <span><strong>Spin Dash</strong> (arranque supersônico!)</span>
+                </div>
+                <div class="pt-1 border-t border-slate-800 text-[11px] sm:text-xs text-amber-300 flex items-center gap-2">
+                    <span>💍</span>
+                    <span>Levar dano com anéis espalha eles pelo chão. Com <strong>0 anéis</strong>, é Fim de Jogo!</span>
+                </div>
+            </div>
+
+            <!-- Recorde Atual -->
+            <div id="startHighScore" class="mt-4 font-arcade text-xs text-emerald-400">
+                RECORDE: 000000 PTS
+            </div>
+
+            <!-- Botão Jogar -->
+            <button id="btnStartGame" class="sonic-btn mt-5 w-full py-4 rounded-2xl font-arcade text-base sm:text-lg text-white tracking-wider cursor-pointer">
+                ▶ JOGAR AGORA
+            </button>
+        </div>
+    </div>
+
+    <!-- Tela de Pausa -->
+    <div id="pauseScreen" class="hidden fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
+        <div class="max-w-sm w-full bg-slate-900 border-4 border-sky-400 rounded-3xl p-6 text-center shadow-2xl">
+            <h2 class="font-arcade text-xl sm:text-2xl text-yellow-400 mb-2">PAUSADO</h2>
+            <p class="text-slate-300 text-sm mb-6">Respire fundo antes de acelerar novamente!</p>
+            <div class="space-y-3">
+                <button id="btnResume" class="sonic-btn w-full py-3.5 rounded-xl font-arcade text-sm text-white cursor-pointer">
+                    CONTINUAR
+                </button>
+                <button id="btnRestartFromPause" class="w-full py-3 rounded-xl font-arcade text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border-2 border-slate-600 cursor-pointer transition">
+                    REINICIAR FASE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Game Over -->
+    <div id="gameOverScreen" class="hidden fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md">
+        <div class="max-w-md w-full bg-gradient-to-b from-slate-900 to-slate-950 border-4 border-red-500 rounded-3xl p-6 sm:p-8 text-center shadow-2xl">
+            <h2 class="font-arcade text-2xl sm:text-3xl text-red-500 hud-text mb-2">FIM DE JOGO</h2>
+            <p id="gameOverReason" class="text-slate-300 text-xs sm:text-sm mb-5">Você ficou sem anéis de proteção!</p>
+
+            <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-4 space-y-3 mb-5">
+                <div class="flex justify-between items-center">
+                    <span class="font-arcade text-xs text-sky-300">PONTUAÇÃO</span>
+                    <span id="finalScore" class="font-arcade text-sm sm:text-base text-white">000000</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-arcade text-xs text-yellow-400">DISTÂNCIA</span>
+                    <span id="finalDistance" class="font-arcade text-sm sm:text-base text-white">0 m</span>
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span class="font-arcade text-xs text-emerald-400">RECORDE</span>
+                    <span id="finalHighScore" class="font-arcade text-sm sm:text-base text-emerald-300">000000</span>
+                </div>
+            </div>
+
+            <button id="btnRestartGame" class="sonic-btn w-full py-4 rounded-2xl font-arcade text-sm sm:text-base text-white tracking-wider cursor-pointer">
+                ↻ JOGAR NOVAMENTE
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * SONIC RUNNER - GREEN HILL
+         * Jogo completo em arquivo único com HTML5 Canvas e Web Audio API
+         * ============================================================================
+         */
+
+        // ----------------------------------------------------------------------------
+        // 1. SINTETIZADOR DE ÁUDIO RETRÔ (WEB AUDIO API)
+        // ----------------------------------------------------------------------------
+        class RetroSoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            // Inicializa ou desbloqueia o contexto de áudio na primeira interação
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            // Som clássico de Pulo (varredura rápida de onda quadrada)
+            playJump() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(190, now);
+                osc.frequency.exponentialRampToValueAtTime(640, now + 0.16);
+
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.18);
+            }
+
+            // Som icônico de coleta de Anel (duas notas agudas cristalinas: E6 -> B6)
+            playRing() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+
+                const playTone = (freq, startTime, duration) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, startTime);
+
+                    gain.gain.setValueAtTime(0.16, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + duration);
+                };
+
+                playTone(1318.5, now, 0.09);        // E6
+                playTone(1975.5, now + 0.07, 0.25); // B6
+            }
+
+            // Som de carregamento do Spin Dash
+            playSpinCharge(chargeLevel = 1) {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                const baseFreq = 220 + chargeLevel * 180;
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.45, now + 0.1);
+
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+
+            // Som de disparo do Spin Dash
+            playSpinRelease() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(520, now);
+                osc.frequency.exponentialRampToValueAtTime(140, now + 0.25);
+
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.27);
+            }
+
+            // Som de destruir Badnik (estouro retrô)
+            playEnemyPop() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+
+                // Ruído branco curto para explosão
+                const bufferSize = this.ctx.sampleRate * 0.15;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(900, now);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+
+            // Som de Mola (Boing!)
+            playSpring() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(160, now);
+                osc.frequency.exponentialRampToValueAtTime(780, now + 0.12);
+                osc.frequency.exponentialRampToValueAtTime(420, now + 0.22);
+                osc.frequency.exponentialRampToValueAtTime(920, now + 0.34);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.36);
+            }
+
+            // Som de perda de anéis ao sofrer dano
+            playRingLoss() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                for (let i = 0; i < 6; i++) {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    const start = now + i * 0.045;
+                    osc.frequency.setValueAtTime(1600 - i * 140, start);
+                    osc.frequency.exponentialRampToValueAtTime(900, start + 0.08);
+
+                    gain.gain.setValueAtTime(0.14, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + 0.1);
+                }
+            }
+
+            // Som de Game Over
+            playGameOver() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const notes = [392.0, 349.23, 329.63, 261.63]; // G4, F4, E4, C4
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    const start = now + idx * 0.18;
+                    osc.frequency.setValueAtTime(freq, start);
+
+                    gain.gain.setValueAtTime(0.14, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + 0.26);
+                });
+            }
+        }
+
+        const sound = new RetroSoundEngine();
+
+        // ----------------------------------------------------------------------------
+        // 2. CONFIGURAÇÃO DO CANVAS E ESCALA RESPONSIVA
+        // ----------------------------------------------------------------------------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Altura virtual fixa para garantir que pulos e física sejam consistentes em qualquer tela
+        const VIRTUAL_HEIGHT = 540;
+        let virtualWidth = 960;
+        let renderScale = 1;
+
+        function resizeCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+
+            renderScale = (height / VIRTUAL_HEIGHT) * dpr;
+            virtualWidth = width / (height / VIRTUAL_HEIGHT);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ----------------------------------------------------------------------------
+        // 3. CONTROLES (TECLADO E TOUCH)
+        // ----------------------------------------------------------------------------
+        const input = {
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+            jumpPressed: false,
+            dashPressed: false
+        };
+
+        // Detecta dispositivo touch para exibir controles virtuais automaticamente
+        const touchControlsEl = document.getElementById('touchControls');
+        function detectTouchDevice() {
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 820) {
+                touchControlsEl.classList.remove('hidden');
+            }
+        }
+        detectTouchDevice();
+        window.addEventListener('resize', detectTouchDevice);
+
+        window.addEventListener('keydown', (e) => {
+            sound.init();
+            const code = e.code;
+
+            if (code === 'ArrowLeft' || code === 'KeyA') input.left = true;
+            if (code === 'ArrowRight' || code === 'KeyD') input.right = true;
+            if (code === 'ArrowUp' || code === 'KeyW' || code === 'Space') {
+                if (!input.up) input.jumpPressed = true;
+                input.up = true;
+                if (code === 'Space') e.preventDefault();
+            }
+            if (code === 'ArrowDown' || code === 'KeyS') {
+                input.down = true;
+            }
+            if (code === 'ShiftLeft' || code === 'ShiftRight') {
+                if (!input.dashPressed) {
+                    triggerQuickSpinDash();
+                }
+                input.dashPressed = true;
+            }
+            if (code === 'Escape' || code === 'KeyP') {
+                if (gameState === 'PLAYING') pauseGame();
+                else if (gameState === 'PAUSED') resumeGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const code = e.code;
+            if (code === 'ArrowLeft' || code === 'KeyA') input.left = false;
+            if (code === 'ArrowRight' || code === 'KeyD') input.right = false;
+            if (code === 'ArrowUp' || code === 'KeyW' || code === 'Space') input.up = false;
+            if (code === 'ArrowDown' || code === 'KeyS') {
+                if (input.down) releaseSpinDash();
+                input.down = false;
+            }
+            if (code === 'ShiftLeft' || code === 'ShiftRight') {
+                input.dashPressed = false;
+            }
+        });
+
+        // Configuração dos botões touch virtuais
+        function bindTouchButton(btnId, onStart, onEnd) {
+            const btn = document.getElementById(btnId);
+            const handleStart = (e) => {
+                e.preventDefault();
+                sound.init();
+                btn.classList.add('active');
+                onStart();
+            };
+            const handleEnd = (e) => {
+                e.preventDefault();
+                btn.classList.remove('active');
+                if (onEnd) onEnd();
+            };
+            btn.addEventListener('touchstart', handleStart, { passive: false });
+            btn.addEventListener('touchend', handleEnd, { passive: false });
+            btn.addEventListener('touchcancel', handleEnd, { passive: false });
+            btn.addEventListener('mousedown', handleStart);
+            btn.addEventListener('mouseup', handleEnd);
+            btn.addEventListener('mouseleave', handleEnd);
+        }
+
+        bindTouchButton('touchLeft', () => { input.left = true; }, () => { input.left = false; });
+        bindTouchButton('touchRight', () => { input.right = true; }, () => { input.right = false; });
+        bindTouchButton('touchJump', () => { input.jumpPressed = true; input.up = true; }, () => { input.up = false; });
+        bindTouchButton('touchDash', () => { triggerQuickSpinDash(); }, null);
+
+        // ----------------------------------------------------------------------------
+        // 4. ESTADO DO JOGO E ENTIDADES
+        // ----------------------------------------------------------------------------
+        let gameState = 'START'; // 'START', 'PLAYING', 'PAUSED', 'GAMEOVER'
+        let score = 0;
+        let rings = 0;
+        let highScore = parseInt(localStorage.getItem('sonicRunnerHighScore') || '0', 10);
+        let distanceMeters = 0;
+        let cameraX = 0;
+        let worldTime = 0;
+        let zoneBannerTimer = 0;
+
+        // Jogador (Sonic)
+        const player = {
+            x: 160,
+            y: 300,
+            vx: 0,
+            vy: 0,
+            radius: 20,
+            facing: 1, // 1 = direita, -1 = esquerda
+            grounded: false,
+            state: 'IDLE', // 'IDLE', 'RUN', 'JUMP', 'SPINDASH', 'ROLL', 'HURT'
+            animTimer: 0,
+            spinCharge: 0,
+            invulnTimer: 0,
+            afterimages: []
+        };
+
+        // Listas de elementos do mundo
+        let groundSegments = [];
+        let platforms = [];
+        let worldRings = [];
+        let scatteredRings = [];
+        let enemies = [];
+        let springs = [];
+        let spikes = [];
+        let sceneries = []; // Palmeiras, girassóis, totens
+        let particles = [];
+        let floatingTexts = [];
+        let freedAnimals = [];
+
+        let nextChunkX = 0;
+        const GROUND_Y = 445;
+
+        // ----------------------------------------------------------------------------
+        // 5. GERAÇÃO PROCEDURAL DA GREEN HILL ZONE
+        // ----------------------------------------------------------------------------
+        function resetWorld() {
+            score = 0;
+            rings = 0;
+            distanceMeters = 0;
+            cameraX = 0;
+            worldTime = 0;
+            zoneBannerTimer = 2.8;
+
+            player.x = 180;
+            player.y = GROUND_Y - player.radius;
+            player.vx = 0;
+            player.vy = 0;
+            player.facing = 1;
+            player.grounded = true;
+            player.state = 'IDLE';
+            player.spinCharge = 0;
+            player.invulnTimer = 0;
+            player.afterimages = [];
+
+            groundSegments = [];
+            platforms = [];
+            worldRings = [];
+            scatteredRings = [];
+            enemies = [];
+            springs = [];
+            spikes = [];
+            sceneries = [];
+            particles = [];
+            floatingTexts = [];
+            freedAnimals = [];
+
+            // Chão inicial seguro e plano com anéis de boas-vindas
+            groundSegments.push({ x: -200, width: 1500, y: GROUND_Y });
+            addSceneryDecor(120, GROUND_Y, 'PALM');
+            addSceneryDecor(380, GROUND_Y, 'FLOWER');
+            addSceneryDecor(680, GROUND_Y, 'TOTEM');
+            addSceneryDecor(980, GROUND_Y, 'PALM');
+
+            // Linha inicial de anéis dourados
+            for (let i = 0; i < 6; i++) {
+                worldRings.push({ x: 420 + i * 48, y: GROUND_Y - 32, collected: false, phase: i * 0.4 });
+            }
+
+            // Primeiro Badnik fácil para testar o pulo giratório
+            enemies.push({
+                type: 'MOTOBUG',
+                x: 920,
+                y: GROUND_Y - 18,
+                minX: 800,
+                maxX: 1120,
+                vx: -90,
+                alive: true,
+                anim: 0
+            });
+
+            nextChunkX = 1300;
+            while (nextChunkX < 4500) {
+                generateNextChunk();
+            }
+
+            updateHUD();
+        }
+
+        function addSceneryDecor(x, groundY, type) {
+            sceneries.push({
+                x,
+                y: groundY,
+                type,
+                scale: 0.9 + Math.random() * 0.3,
+                phase: Math.random() * Math.PI * 2
+            });
+        }
+
+        function generateNextChunk() {
+            const difficulty = Math.min(1, nextChunkX / 25000);
+            const pattern = Math.floor(Math.random() * 6);
+
+            if (pattern === 0) {
+                // Padrão 0: Reta rápida com arco de anéis e Motobug
+                const width = 760 + Math.random() * 240;
+                groundSegments.push({ x: nextChunkX, width, y: GROUND_Y });
+
+                addSceneryDecor(nextChunkX + 120, GROUND_Y, 'PALM');
+                addSceneryDecor(nextChunkX + width - 160, GROUND_Y, 'FLOWER');
+
+                // Arco de anéis
+                const arcStart = nextChunkX + 160;
+                for (let i = 0; i < 7; i++) {
+                    const rx = arcStart + i * 46;
+                    const ry = GROUND_Y - 34 - Math.sin((i / 6) * Math.PI) * 85;
+                    worldRings.push({ x: rx, y: ry, collected: false, phase: i * 0.3 });
+                }
+
+                // Motobug patrulhando
+                enemies.push({
+                    type: 'MOTOBUG',
+                    x: nextChunkX + width * 0.65,
+                    y: GROUND_Y - 18,
+                    minX: nextChunkX + 120,
+                    maxX: nextChunkX + width - 120,
+                    vx: -(95 + difficulty * 70),
+                    alive: true,
+                    anim: 0
+                });
+
+                nextChunkX += width;
+            } else if (pattern === 1) {
+                // Padrão 1: Mola vermelha lançando para plataformas flutuantes altas
+                const width = 880;
+                groundSegments.push({ x: nextChunkX, width, y: GROUND_Y });
+
+                springs.push({
+                    x: nextChunkX + 150,
+                    y: GROUND_Y - 16,
+                    bounceTimer: 0
+                });
+
+                // Plataforma flutuante 1
+                const plat1X = nextChunkX + 260;
+                const plat1Y = GROUND_Y - 145;
+                platforms.push({ x: plat1X, y: plat1Y, width: 220, height: 28 });
+
+                for (let i = 0; i < 4; i++) {
+                    worldRings.push({ x: plat1X + 35 + i * 48, y: plat1Y - 28, collected: false, phase: i * 0.4 });
+                }
+
+                // Plataforma flutuante 2
+                const plat2X = nextChunkX + 540;
+                const plat2Y = GROUND_Y - 190;
+                platforms.push({ x: plat2X, y: plat2Y, width: 220, height: 28 });
+
+                for (let i = 0; i < 4; i++) {
+                    worldRings.push({ x: plat2X + 35 + i * 48, y: plat2Y - 28, collected: false, phase: i * 0.4 });
+                }
+
+                // Espinhos no chão abaixo das plataformas para incentivar ir por cima
+                spikes.push({ x: nextChunkX + 420, y: GROUND_Y - 22, count: 3 });
+
+                addSceneryDecor(nextChunkX + 740, GROUND_Y, 'PALM');
+                nextChunkX += width;
+            } else if (pattern === 2) {
+                // Padrão 2: Abismo com plataformas suspensas e Buzz Bomber voador
+                const gapWidth = 170 + difficulty * 55;
+                nextChunkX += gapWidth;
+
+                const platX = nextChunkX - gapWidth * 0.5 - 65;
+                const platY = GROUND_Y - 55;
+                platforms.push({ x: platX, y: platY, width: 130, height: 26 });
+                worldRings.push({ x: platX + 65, y: platY - 30, collected: false, phase: 0 });
+
+                const landWidth = 680;
+                groundSegments.push({ x: nextChunkX, width: landWidth, y: GROUND_Y });
+
+                enemies.push({
+                    type: 'BUZZBOMBER',
+                    x: nextChunkX + 300,
+                    y: GROUND_Y - 135,
+                    baseY: GROUND_Y - 135,
+                    minX: nextChunkX + 80,
+                    maxX: nextChunkX + landWidth - 80,
+                    vx: -(120 + difficulty * 80),
+                    alive: true,
+                    anim: 0
+                });
+
+                for (let i = 0; i < 5; i++) {
+                    worldRings.push({ x: nextChunkX + 180 + i * 46, y: GROUND_Y - 32, collected: false, phase: i * 0.35 });
+                }
+
+                addSceneryDecor(nextChunkX + 520, GROUND_Y, 'TOTEM');
+                nextChunkX += landWidth;
+            } else if (pattern === 3) {
+                // Padrão 3: Sequência de saltos sobre espinhos e anéis
+                const width = 920;
+                groundSegments.push({ x: nextChunkX, width, y: GROUND_Y });
+
+                spikes.push({ x: nextChunkX + 240, y: GROUND_Y - 22, count: 2 });
+                for (let i = 0; i < 3; i++) {
+                    worldRings.push({ x: nextChunkX + 225 + i * 38, y: GROUND_Y - 95, collected: false, phase: i * 0.5 });
+                }
+
+                spikes.push({ x: nextChunkX + 560, y: GROUND_Y - 22, count: 3 });
+                for (let i = 0; i < 3; i++) {
+                    worldRings.push({ x: nextChunkX + 555 + i * 38, y: GROUND_Y - 105, collected: false, phase: i * 0.5 });
+                }
+
+                addSceneryDecor(nextChunkX + 110, GROUND_Y, 'FLOWER');
+                addSceneryDecor(nextChunkX + 790, GROUND_Y, 'PALM');
+                nextChunkX += width;
+            } else if (pattern === 4) {
+                // Padrão 4: Pista dupla (Plataforma longa elevada + caminho inferior com Badniks)
+                const width = 980;
+                groundSegments.push({ x: nextChunkX, width, y: GROUND_Y });
+
+                const highPlatX = nextChunkX + 180;
+                const highPlatY = GROUND_Y - 125;
+                platforms.push({ x: highPlatX, y: highPlatY, width: 580, height: 28 });
+
+                for (let i = 0; i < 9; i++) {
+                    worldRings.push({ x: highPlatX + 45 + i * 60, y: highPlatY - 30, collected: false, phase: i * 0.3 });
+                }
+
+                enemies.push({
+                    type: 'MOTOBUG',
+                    x: nextChunkX + 460,
+                    y: GROUND_Y - 18,
+                    minX: nextChunkX + 200,
+                    maxX: nextChunkX + 760,
+                    vx: -110,
+                    alive: true,
+                    anim: 0
+                });
+
+                enemies.push({
+                    type: 'BUZZBOMBER',
+                    x: nextChunkX + 500,
+                    y: highPlatY - 75,
+                    baseY: highPlatY - 75,
+                    minX: highPlatX + 40,
+                    maxX: highPlatX + 540,
+                    vx: 130,
+                    alive: true,
+                    anim: 0
+                });
+
+                nextChunkX += width;
+            } else {
+                // Padrão 5: Duplo salto sobre abismos médios
+                for (let step = 0; step < 2; step++) {
+                    nextChunkX += 145;
+                    const segW = 340;
+                    groundSegments.push({ x: nextChunkX, width: segW, y: GROUND_Y });
+                    addSceneryDecor(nextChunkX + 70, GROUND_Y, step === 0 ? 'PALM' : 'FLOWER');
+                    for (let i = 0; i < 4; i++) {
+                        worldRings.push({ x: nextChunkX + 95 + i * 45, y: GROUND_Y - 32, collected: false, phase: i * 0.4 });
+                    }
+                    nextChunkX += segW;
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------------------
+        // 6. MECÂNICAS DO JOGADOR (SPIN DASH, DANO, PARTICULAS)
+        // ----------------------------------------------------------------------------
+        function triggerQuickSpinDash() {
+            if (gameState !== 'PLAYING') return;
+            if (player.grounded && player.state !== 'HURT') {
+                sound.playSpinRelease();
+                player.state = 'ROLL';
+                player.vx = player.facing * 760;
+                spawnDustBurst(player.x, player.y + player.radius, 12);
+            }
+        }
+
+        function releaseSpinDash() {
+            if (player.state === 'SPINDASH') {
+                sound.playSpinRelease();
+                const boost = 620 + Math.min(player.spinCharge, 1) * 320;
+                player.vx = player.facing * boost;
+                player.state = 'ROLL';
+                player.spinCharge = 0;
+                spawnDustBurst(player.x, player.y + player.radius, 14);
+            }
+        }
+
+        function damagePlayer(reason = 'Você sofreu dano!') {
+            if (player.invulnTimer > 0 || gameState !== 'PLAYING') return;
+
+            if (rings > 0) {
+                // Mecânica clássica do Sonic: espalha os anéis coletados!
+                sound.playRingLoss();
+                const scatterCount = Math.min(rings, 24);
+                for (let i = 0; i < scatterCount; i++) {
+                    const angle = -Math.PI * 0.15 - (i / scatterCount) * Math.PI * 0.7;
+                    const speed = 220 + (i % 4) * 85;
+                    scatteredRings.push({
+                        x: player.x,
+                        y: player.y - 10,
+                        vx: Math.cos(angle) * speed * (i % 2 === 0 ? 1 : -1),
+                        vy: Math.sin(angle) * speed - 120,
+                        life: 4.5,
+                        phase: i * 0.5
+                    });
+                }
+
+                rings = 0;
+                player.invulnTimer = 2.0;
+                player.state = 'HURT';
+                player.grounded = false;
+                player.vy = -360;
+                player.vx = -player.facing * 220;
+                addFloatingText(player.x, player.y - 30, 'ANÉIS PERDIDOS!', '#ef4444');
+                updateHUD();
+            } else {
+                // Sem anéis = Game Over
+                sound.playGameOver();
+                triggerGameOver(reason);
+            }
+        }
+
+        function spawnDustBurst(x, y, count = 8) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x + (Math.random() - 0.5) * 16,
+                    y: y - Math.random() * 8,
+                    vx: (Math.random() - 0.5) * 160 - player.vx * 0.2,
+                    vy: -Math.random() * 90 - 20,
+                    size: 5 + Math.random() * 7,
+                    color: 'rgba(255, 255, 255, 0.85)',
+                    life: 0.35 + Math.random() * 0.2,
+                    maxLife: 0.55
+                });
+            }
+        }
+
+        function spawnRingSparkle(x, y) {
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(ang) * 110,
+                    vy: Math.sin(ang) * 110,
+                    size: 4,
+                    color: '#fde047',
+                    life: 0.3,
+                    maxLife: 0.3
+                });
+            }
+        }
+
+        function spawnExplosion(x, y) {
+            for (let i = 0; i < 16; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 60 + Math.random() * 200;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(ang) * spd,
+                    vy: Math.sin(ang) * spd,
+                    size: 6 + Math.random() * 9,
+                    color: i % 2 === 0 ? '#f97316' : '#facc15',
+                    life: 0.4 + Math.random() * 0.25,
+                    maxLife: 0.65
+                });
+            }
+            // Liberta um bichinho da floresta (Flicky azul ou coelhinho branco)
+            freedAnimals.push({
+                x,
+                y,
+                vx: (Math.random() > 0.5 ? 1 : -1) * 130,
+                vy: -280,
+                type: Math.random() > 0.5 ? 'BIRD' : 'BUNNY',
+                life: 3.0
+            });
+        }
+
+        function addFloatingText(x, y, text, color = '#fde047') {
+            floatingTexts.push({ x, y, text, color, life: 0.9 });
+        }
+
+        // ----------------------------------------------------------------------------
+        // 7. ATUALIZAÇÃO DE FÍSICA E LÓGICA DO JOGO
+        // ----------------------------------------------------------------------------
+        function update(dt) {
+            if (gameState !== 'PLAYING') return;
+
+            worldTime += dt;
+            if (zoneBannerTimer > 0) zoneBannerTimer -= dt;
+            if (player.invulnTimer > 0) player.invulnTimer -= dt;
+
+            // Gera novos trechos do cenário à frente
+            while (nextChunkX < cameraX + virtualWidth + 1600) {
+                generateNextChunk();
+            }
+
+            // Física horizontal do Sonic
+            const maxRunSpeed = 560;
+            const accel = player.grounded ? 920 : 620;
+            const friction = player.grounded ? (player.state === 'ROLL' ? 240 : 780) : 140;
+
+            if (player.state === 'HURT') {
+                // Controle reduzido durante knockback
+                if (player.grounded) {
+                    player.state = 'IDLE';
+                }
+            } else if (input.down && player.grounded && Math.abs(player.vx) < 180) {
+                // Carregando Spin Dash parado/devagar
+                player.state = 'SPINDASH';
+                player.vx *= 0.85;
+                const prevCharge = player.spinCharge;
+                player.spinCharge = Math.min(1, player.spinCharge + dt * 1.6);
+                if (Math.floor(prevCharge * 5) !== Math.floor(player.spinCharge * 5)) {
+                    sound.playSpinCharge(player.spinCharge);
+                    spawnDustBurst(player.x - player.facing * 12, player.y + player.radius, 3);
+                }
+                if (input.jumpPressed) {
+                    player.spinCharge = Math.min(1, player.spinCharge + 0.35);
+                    sound.playSpinCharge(player.spinCharge);
+                    spawnDustBurst(player.x - player.facing * 12, player.y + player.radius, 5);
+                }
+            } else {
+                if (player.state === 'SPINDASH' && !input.down) {
+                    releaseSpinDash();
+                }
+
+                if (input.right) {
+                    player.facing = 1;
+                    if (player.vx < maxRunSpeed) {
+                        player.vx += accel * dt;
+                    }
+                } else if (input.left) {
+                    player.facing = -1;
+                    if (player.vx > -maxRunSpeed) {
+                        player.vx -= accel * dt;
+                    }
+                } else {
+                    // Desaceleração natural
+                    if (Math.abs(player.vx) <= friction * dt) {
+                        player.vx = 0;
+                    } else {
+                        player.vx -= Math.sign(player.vx) * friction * dt;
+                    }
+                }
+
+                // Se pressionar Baixo enquanto corre rápido, entra em modo Rolamento (Spin Roll)
+                if (input.down && player.grounded && Math.abs(player.vx) >= 180) {
+                    player.state = 'ROLL';
+                } else if (player.state === 'ROLL' && Math.abs(player.vx) < 160 && player.grounded) {
+                    player.state = 'RUN';
+                }
+            }
+
+            // Pulo
+            if (input.jumpPressed && player.grounded && player.state !== 'SPINDASH') {
+                sound.playJump();
+                player.vy = -565;
+                player.grounded = false;
+                player.state = 'JUMP';
+                spawnDustBurst(player.x, player.y + player.radius, 6);
+            }
+            input.jumpPressed = false;
+
+            // Gravidade
+            const gravity = 1480;
+            player.vy += gravity * dt;
+
+            // Guarda posição anterior para detecção precisa de aterrissagem
+            const prevBottom = player.y + player.radius;
+
+            player.x += player.vx * dt;
+            player.y += player.vy * dt;
+
+            // Impede voltar além da borda esquerda da câmera
+            const leftWall = cameraX + 24;
+            if (player.x < leftWall) {
+                player.x = leftWall;
+                if (player.vx < 0) player.vx = 0;
+            }
+
+            // Atualiza distância e pontos por avanço
+            const currentMeters = Math.max(0, Math.floor((player.x - 180) / 25));
+            if (currentMeters > distanceMeters) {
+                score += (currentMeters - distanceMeters) * 2;
+                distanceMeters = currentMeters;
+            }
+
+            // Colisão com o Chão e Plataformas
+            player.grounded = false;
+            const newBottom = player.y + player.radius;
+
+            if (player.vy >= 0) {
+                // Verifica segmentos de chão
+                for (const seg of groundSegments) {
+                    if (player.x + 12 >= seg.x && player.x - 12 <= seg.x + seg.width) {
+                        if (prevBottom <= seg.y + 14 && newBottom >= seg.y) {
+                            player.y = seg.y - player.radius;
+                            player.vy = 0;
+                            player.grounded = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Verifica plataformas flutuantes (One-way platforms)
+                if (!player.grounded) {
+                    for (const plat of platforms) {
+                        if (player.x + 12 >= plat.x && player.x - 12 <= plat.x + plat.width) {
+                            if (prevBottom <= plat.y + 12 && newBottom >= plat.y) {
+                                player.y = plat.y - player.radius;
+                                player.vy = 0;
+                                player.grounded = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Define estado visual do Sonic
+            if (player.grounded && player.state !== 'SPINDASH' && player.state !== 'HURT') {
+                if (player.state === 'ROLL' && Math.abs(player.vx) >= 160) {
+                    // Mantém rolando
+                } else if (Math.abs(player.vx) > 15) {
+                    player.state = 'RUN';
+                } else {
+                    player.state = 'IDLE';
+                }
+            } else if (!player.grounded && player.state !== 'HURT') {
+                player.state = 'JUMP';
+            }
+
+            // Rastro de velocidade (Afterimages) quando estiver supersônico
+            if (Math.abs(player.vx) > 540 || player.state === 'ROLL') {
+                if (Math.random() < 0.55) {
+                    player.afterimages.push({
+                        x: player.x,
+                        y: player.y,
+                        alpha: 0.45,
+                        isBall: player.state === 'JUMP' || player.state === 'ROLL'
+                    });
+                }
+            }
+            player.afterimages.forEach(a => a.alpha -= dt * 2.2);
+            player.afterimages = player.afterimages.filter(a => a.alpha > 0);
+
+            // Atualiza animação do Sonic
+            player.animTimer += dt * (4 + Math.abs(player.vx) * 0.035);
+
+            // Queda em abismo
+            if (player.y > VIRTUAL_HEIGHT + 90) {
+                sound.playGameOver();
+                triggerGameOver('Você caiu em um abismo da Green Hill!');
+                return;
+            }
+
+            // Câmera suave acompanhando o Sonic (com look-ahead para frente)
+            const targetCamX = player.x - virtualWidth * 0.32;
+            if (targetCamX > cameraX) {
+                cameraX += (targetCamX - cameraX) * Math.min(1, dt * 9);
+            }
+
+            // Coleta de Anéis do Mundo
+            for (const r of worldRings) {
+                if (r.collected) continue;
+                r.phase += dt * 6;
+                const dx = player.x - r.x;
+                const dy = player.y - r.y;
+                if (dx * dx + dy * dy < 36 * 36) {
+                    r.collected = true;
+                    rings++;
+                    score += 10;
+                    sound.playRing();
+                    spawnRingSparkle(r.x, r.y);
+                }
+            }
+
+            // Atualiza Anéis Espalhados (após dano)
+            for (let i = scatteredRings.length - 1; i >= 0; i--) {
+                const sr = scatteredRings[i];
+                sr.life -= dt;
+                sr.phase += dt * 10;
+                sr.vy += 980 * dt;
+                sr.x += sr.vx * dt;
+                sr.y += sr.vy * dt;
+
+                // Quica no chão
+                for (const seg of groundSegments) {
+                    if (sr.x >= seg.x && sr.x <= seg.x + seg.width && sr.y + 10 >= seg.y && sr.vy > 0) {
+                        sr.y = seg.y - 10;
+                        sr.vy = -sr.vy * 0.72;
+                    }
+                }
+
+                // Pode ser recoletado após 0.45s
+                if (sr.life < 4.05) {
+                    const dx = player.x - sr.x;
+                    const dy = player.y - sr.y;
+                    if (dx * dx + dy * dy < 34 * 34) {
+                        rings++;
+                        score += 10;
+                        sound.playRing();
+                        spawnRingSparkle(sr.x, sr.y);
+                        scatteredRings.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                if (sr.life <= 0) {
+                    scatteredRings.splice(i, 1);
+                }
+            }
+
+            // Atualiza Molas
+            for (const sp of springs) {
+                if (sp.bounceTimer > 0) sp.bounceTimer -= dt;
+                const dx = Math.abs(player.x - sp.x);
+                const dy = Math.abs((player.y + player.radius) - sp.y);
+                if (dx < 26 && dy < 18 && player.vy >= -50) {
+                    sound.playSpring();
+                    player.vy = -820;
+                    player.grounded = false;
+                    player.state = 'JUMP';
+                    sp.bounceTimer = 0.35;
+                    addFloatingText(sp.x, sp.y - 25, 'BOING!', '#facc15');
+                }
+            }
+
+            // Atualiza Espinhos
+            for (const spk of spikes) {
+                const totalW = spk.count * 22;
+                if (
+                    player.x + 12 > spk.x &&
+                    player.x - 12 < spk.x + totalW &&
+                    player.y + player.radius > spk.y + 4 &&
+                    player.y - player.radius < spk.y + 22
+                ) {
+                    damagePlayer('Você acertou os espinhos!');
+                }
+            }
+
+            // Atualiza Inimigos (Badniks)
+            const isSpinAttacking = player.state === 'JUMP' || player.state === 'ROLL' || player.state === 'SPINDASH';
+
+            for (const enemy of enemies) {
+                if (!enemy.alive) continue;
+                enemy.anim += dt * 8;
+                enemy.x += enemy.vx * dt;
+
+                if (enemy.x <= enemy.minX) {
+                    enemy.x = enemy.minX;
+                    enemy.vx = Math.abs(enemy.vx);
+                } else if (enemy.x >= enemy.maxX) {
+                    enemy.x = enemy.maxX;
+                    enemy.vx = -Math.abs(enemy.vx);
+                }
+
+                if (enemy.type === 'BUZZBOMBER') {
+                    enemy.y = enemy.baseY + Math.sin(enemy.anim * 0.6) * 14;
+                }
+
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const hitDist = 36;
+
+                if (dx * dx + dy * dy < hitDist * hitDist) {
+                    if (isSpinAttacking) {
+                        // Destrói o Badnik!
+                        enemy.alive = false;
+                        sound.playEnemyPop();
+                        score += 100;
+                        spawnExplosion(enemy.x, enemy.y);
+                        addFloatingText(enemy.x, enemy.y - 20, '+100', '#38bdf8');
+
+                        // Se estava no ar, quica para cima!
+                        if (!player.grounded) {
+                            player.vy = -440;
+                        }
+                    } else {
+                        damagePlayer('Um robô Badnik atingiu você!');
+                    }
+                }
+            }
+
+            // Atualiza Partículas
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Atualiza Textos Flutuantes
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.life -= dt;
+                ft.y -= 45 * dt;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // Atualiza Bichinhos Libertados
+            for (let i = freedAnimals.length - 1; i >= 0; i--) {
+                const fa = freedAnimals[i];
+                fa.life -= dt;
+                fa.vy += 750 * dt;
+                fa.x += fa.vx * dt;
+                fa.y += fa.vy * dt;
+                if (fa.y > GROUND_Y - 10 && fa.vy > 0) {
+                    fa.y = GROUND_Y - 10;
+                    fa.vy = -240;
+                }
+                if (fa.life <= 0) freedAnimals.splice(i, 1);
+            }
+
+            // Limpeza de objetos muito atrás da câmera para manter 60 FPS fluidos
+            const cleanupX = cameraX - 600;
+            if (groundSegments.length > 8) {
+                groundSegments = groundSegments.filter(g => g.x + g.width > cleanupX);
+            }
+            platforms = platforms.filter(p => p.x + p.width > cleanupX);
+            worldRings = worldRings.filter(r => !r.collected && r.x > cleanupX);
+            enemies = enemies.filter(e => e.alive && e.x > cleanupX);
+            springs = springs.filter(s => s.x > cleanupX);
+            spikes = spikes.filter(s => s.x + 100 > cleanupX);
+            sceneries = sceneries.filter(sc => sc.x > cleanupX);
+
+            updateHUD();
+        }
+
+        // ----------------------------------------------------------------------------
+        // 8. RENDERIZAÇÃO GRÁFICA (GREEN HILL ZONE + SONIC + BADNIKS)
+        // ----------------------------------------------------------------------------
+        function draw() {
+            ctx.save();
+            ctx.scale(renderScale, renderScale);
+
+            // 1. Céu Azul Vibrante da Green Hill Zone
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, VIRTUAL_HEIGHT);
+            skyGrad.addColorStop(0, '#0284c7');
+            skyGrad.addColorStop(0.55, '#38bdf8');
+            skyGrad.addColorStop(1, '#bae6fd');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, virtualWidth, VIRTUAL_HEIGHT);
+
+            // 2. Nuvens em Paralaxe Lenta
+            drawParallaxClouds();
+
+            // 3. Montanhas Geométricas Clássicas da Green Hill Zone
+            drawParallaxMountains();
+
+            // 4. Cachoeiras e Lago Azul ao Fundo
+            drawParallaxWater();
+
+            // Inicia câmera do mundo
+            ctx.save();
+            ctx.translate(-cameraX, 0);
+
+            // 5. Decorações de Cenário (Palmeiras, Girassóis, Totens)
+            for (const sc of sceneries) {
+                if (sc.x < cameraX - 150 || sc.x > cameraX + virtualWidth + 150) continue;
+                drawSceneryItem(sc);
+            }
+
+            // 6. Chão Quadriculado Clássico + Grama Verde Exuberante
+            for (const seg of groundSegments) {
+                if (seg.x + seg.width < cameraX - 50 || seg.x > cameraX + virtualWidth + 50) continue;
+                drawCheckeredGround(seg.x, seg.y, seg.width, VIRTUAL_HEIGHT - seg.y + 40);
+            }
+
+            // 7. Plataformas Flutuantes
+            for (const plat of platforms) {
+                if (plat.x + plat.width < cameraX - 50 || plat.x > cameraX + virtualWidth + 50) continue;
+                drawCheckeredGround(plat.x, plat.y, plat.width, plat.height, true);
+            }
+
+            // 8. Molas Vermelhas e Amarelas
+            for (const sp of springs) {
+                if (sp.x < cameraX - 50 || sp.x > cameraX + virtualWidth + 50) continue;
+                drawSpring(sp);
+            }
+
+            // 9. Espinhos Metálicos
+            for (const spk of spikes) {
+                if (spk.x < cameraX - 100 || spk.x > cameraX + virtualWidth + 100) continue;
+                drawSpikes(spk);
+            }
+
+            // 10. Anéis Dourados Giratórios
+            for (const r of worldRings) {
+                if (r.collected || r.x < cameraX - 40 || r.x > cameraX + virtualWidth + 40) continue;
+                drawGoldenRing(r.x, r.y, r.phase, 1);
+            }
+            for (const sr of scatteredRings) {
+                const alpha = sr.life < 1 ? (Math.sin(sr.life * 25) > 0 ? 1 : 0.25) : 1;
+                drawGoldenRing(sr.x, sr.y, sr.phase, alpha);
+            }
+
+            // 11. Inimigos Badniks
+            for (const enemy of enemies) {
+                if (!enemy.alive || enemy.x < cameraX - 80 || enemy.x > cameraX + virtualWidth + 80) continue;
+                if (enemy.type === 'MOTOBUG') drawMotobug(enemy);
+                else drawBuzzBomber(enemy);
+            }
+
+            // 12. Bichinhos Libertados
+            for (const fa of freedAnimals) {
+                drawFreedAnimal(fa);
+            }
+
+            // 13. Rastros de Velocidade e Sonic
+            for (const ai of player.afterimages) {
+                ctx.save();
+                ctx.globalAlpha = ai.alpha * 0.45;
+                ctx.fillStyle = '#3b82f6';
+                ctx.beginPath();
+                ctx.arc(ai.x, ai.y, player.radius * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            drawSonic();
+
+            // 14. Partículas e Textos Flutuantes
+            for (const p of particles) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            for (const ft of floatingTexts) {
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, ft.life * 1.4);
+                ctx.font = 'bold 14px "Press Start 2P", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#000';
+                ctx.fillText(ft.text, ft.x + 2, ft.y + 2);
+                ctx.fillStyle = ft.color;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            }
+
+            ctx.restore(); // Fim câmera do mundo
+
+            // 15. Linhas de velocidade nas bordas da tela em alta velocidade
+            if (Math.abs(player.vx) > 510 && gameState === 'PLAYING') {
+                drawSpeedLines();
+            }
+
+            // 16. Banner clássico "GREEN HILL ZONE - ACT 1" no início
+            if (zoneBannerTimer > 0 && gameState === 'PLAYING') {
+                drawZoneBanner();
+            }
+
+            ctx.restore();
+        }
+
+        // --- Funções Auxiliares de Desenho ---
+
+        function drawParallaxClouds() {
+            const cloudSpacing = 340;
+            const offset = (cameraX * 0.12 + worldTime * 14) % cloudSpacing;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+
+            for (let x = -offset - 100; x < virtualWidth + 200; x += cloudSpacing) {
+                const y = 75 + (Math.abs(Math.floor((x + offset) / cloudSpacing)) % 3) * 32;
+                ctx.beginPath();
+                ctx.arc(x, y, 24, 0, Math.PI * 2);
+                ctx.arc(x + 26, y - 8, 30, 0, Math.PI * 2);
+                ctx.arc(x + 56, y, 22, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawParallaxMountains() {
+            const hillWidth = 420;
+            const parallaxX = (cameraX * 0.25) % hillWidth;
+            const baseY = 365;
+
+            for (let x = -parallaxX - hillWidth; x < virtualWidth + hillWidth; x += hillWidth) {
+                // Montanha distante
+                ctx.fillStyle = '#15803d';
+                ctx.beginPath();
+                ctx.moveTo(x, baseY);
+                ctx.lineTo(x + hillWidth * 0.5, baseY - 145);
+                ctx.lineTo(x + hillWidth, baseY);
+                ctx.closePath();
+                ctx.fill();
+
+                // Face iluminada estilo poligonal da Green Hill
+                ctx.fillStyle = '#22c55e';
+                ctx.beginPath();
+                ctx.moveTo(x + hillWidth * 0.5, baseY - 145);
+                ctx.lineTo(x + hillWidth * 0.72, baseY - 60);
+                ctx.lineTo(x + hillWidth, baseY);
+                ctx.lineTo(x + hillWidth * 0.5, baseY);
+                ctx.closePath();
+                ctx.fill();
+
+                // Montanha menor sobreposta
+                ctx.fillStyle = '#166534';
+                ctx.beginPath();
+                ctx.moveTo(x + 190, baseY);
+                ctx.lineTo(x + 330, baseY - 95);
+                ctx.lineTo(x + 470, baseY);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        function drawParallaxWater() {
+            const waterY = 365;
+            const waterGrad = ctx.createLinearGradient(0, waterY, 0, VIRTUAL_HEIGHT);
+            waterGrad.addColorStop(0, '#0369a1');
+            waterGrad.addColorStop(1, '#1d4ed8');
+            ctx.fillStyle = waterGrad;
+            ctx.fillRect(0, waterY, virtualWidth, VIRTUAL_HEIGHT - waterY);
+
+            // Brilhos animados na água
+            ctx.fillStyle = 'rgba(186, 230, 253, 0.35)';
+            const shimmerOffset = (cameraX * 0.35 + worldTime * 45) % 120;
+            for (let row = 0; row < 4; row++) {
+                const y = waterY + 12 + row * 18;
+                for (let x = -shimmerOffset; x < virtualWidth; x += 120) {
+                    ctx.fillRect(x, y, 48 - row * 6, 3);
+                }
+            }
+        }
+
+        function drawCheckeredGround(x, y, width, height, isPlatform = false) {
+            const tileSize = 32;
+
+            // Base marrom terra
+            ctx.fillStyle = '#9a3412';
+            ctx.fillRect(x, y + 10, width, height - 10);
+
+            // Padrão quadriculado icônico da Green Hill Zone
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y + 10, width, height - 10);
+            ctx.clip();
+
+            const cols = Math.ceil(width / tileSize) + 1;
+            const rows = Math.ceil((height - 10) / tileSize) + 1;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if ((r + c) % 2 === 0) {
+                        ctx.fillStyle = '#c2410c';
+                    } else {
+                        ctx.fillStyle = '#7c2d12';
+                    }
+                    ctx.fillRect(x + c * tileSize, y + 10 + r * tileSize, tileSize, tileSize);
+                }
+            }
+            ctx.restore();
+
+            // Topo de grama verde vibrante
+            ctx.fillStyle = '#16a34a';
+            ctx.fillRect(x, y, width, 14);
+            ctx.fillStyle = '#4ade80';
+            ctx.fillRect(x, y, width, 5);
+
+            // Dentes triangulares da grama sobre o quadriculado
+            ctx.fillStyle = '#15803d';
+            const toothW = 16;
+            for (let tx = x; tx < x + width - 4; tx += toothW) {
+                ctx.beginPath();
+                ctx.moveTo(tx, y + 14);
+                ctx.lineTo(tx + toothW * 0.5, y + 22);
+                ctx.lineTo(tx + toothW, y + 14);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            if (isPlatform) {
+                ctx.strokeStyle = '#431407';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, width, height);
+            }
+        }
+
+        function drawSceneryItem(sc) {
+            ctx.save();
+            ctx.translate(sc.x, sc.y);
+            ctx.scale(sc.scale, sc.scale);
+
+            if (sc.type === 'PALM') {
+                // Tronco segmentado da palmeira clássica
+                const segments = 6;
+                for (let i = 0; i < segments; i++) {
+                    const sy = -i * 22;
+                    const sx = Math.sin(i * 0.25) * 6;
+                    ctx.fillStyle = i % 2 === 0 ? '#b45309' : '#d97706';
+                    ctx.beginPath();
+                    ctx.ellipse(sx, sy - 11, 11 - i * 0.6, 13, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#78350f';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+
+                // Folhas de palmeira balançando levemente
+                const topX = Math.sin(segments * 0.25) * 6;
+                const topY = -segments * 22;
+                const sway = Math.sin(worldTime * 2.5 + sc.phase) * 0.06;
+
+                ctx.save();
+                ctx.translate(topX, topY);
+                ctx.rotate(sway);
+
+                const leafAngles = [-2.6, -2.0, -1.1, -0.4, 0.3];
+                leafAngles.forEach((ang, idx) => {
+                    ctx.save();
+                    ctx.rotate(ang);
+                    ctx.fillStyle = idx % 2 === 0 ? '#16a34a' : '#22c55e';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.quadraticCurveTo(35, -18, 72, 10);
+                    ctx.quadraticCurveTo(35, 2, 0, 0);
+                    ctx.fill();
+                    ctx.restore();
+                });
+
+                // Cocos
+                ctx.fillStyle = '#713f12';
+                ctx.beginPath();
+                ctx.arc(-5, 6, 6, 0, Math.PI * 2);
+                ctx.arc(6, 7, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (sc.type === 'FLOWER') {
+                // Girassol animado da Green Hill
+                ctx.strokeStyle = '#15803d';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -48);
+                ctx.stroke();
+
+                const petalRot = Math.sin(worldTime * 3 + sc.phase) * 0.15;
+                ctx.save();
+                ctx.translate(0, -52);
+                ctx.rotate(petalRot);
+                ctx.fillStyle = '#facc15';
+                for (let i = 0; i < 8; i++) {
+                    ctx.rotate(Math.PI / 4);
+                    ctx.beginPath();
+                    ctx.ellipse(0, -14, 5, 9, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.fillStyle = '#9a3412';
+                ctx.beginPath();
+                ctx.arc(0, 0, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (sc.type === 'TOTEM') {
+                // Totem decorativo estilo Green Hill
+                ctx.fillStyle = '#92400e';
+                ctx.fillRect(-14, -75, 28, 75);
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(-16, -65, 32, 14);
+                ctx.fillStyle = '#dc2626';
+                ctx.fillRect(-16, -38, 32, 14);
+                // Asas laterais
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.moveTo(-14, -60);
+                ctx.lineTo(-34, -72);
+                ctx.lineTo(-14, -46);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(14, -60);
+                ctx.lineTo(34, -72);
+                ctx.lineTo(14, -46);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawGoldenRing(x, y, phase, alpha = 1) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(x, y);
+
+            // Efeito 3D de rotação variando a largura horizontal
+            const spinWidth = Math.max(0.22, Math.abs(Math.cos(phase)));
+            ctx.scale(spinWidth, 1);
+
+            // Brilho externo dourado
+            ctx.strokeStyle = '#ca8a04';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 12, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, 12, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Reflexo branco brilhante
+            ctx.strokeStyle = '#fef9c3';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(-2, -2, 10, -Math.PI * 0.7, -Math.PI * 0.2);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawSpring(sp) {
+            ctx.save();
+            ctx.translate(sp.x, sp.y);
+            const ext = sp.bounceTimer > 0 ? Math.sin((sp.bounceTimer / 0.35) * Math.PI) * 14 : 0;
+
+            // Base metálica
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(-14, 8, 28, 8);
+
+            // Mola espiral amarela
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(-8, 8);
+            ctx.lineTo(8, 2 - ext * 0.5);
+            ctx.lineTo(-8, -4 - ext);
+            ctx.stroke();
+
+            // Topo vermelho com estrela amarela
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.roundRect(-18, -12 - ext, 36, 10, 4);
+            ctx.fill();
+            ctx.strokeStyle = '#991b1b';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawSpikes(spk) {
+            ctx.save();
+            ctx.translate(spk.x, spk.y);
+
+            for (let i = 0; i < spk.count; i++) {
+                const sx = i * 22;
+                // Triângulo metálico brilhante
+                ctx.fillStyle = '#cbd5e1';
+                ctx.beginPath();
+                ctx.moveTo(sx, 22);
+                ctx.lineTo(sx + 11, 0);
+                ctx.lineTo(sx + 22, 22);
+                ctx.closePath();
+                ctx.fill();
+
+                // Sombra lateral
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath();
+                ctx.moveTo(sx + 11, 0);
+                ctx.lineTo(sx + 22, 22);
+                ctx.lineTo(sx + 11, 22);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Base de fixação
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(-2, 18, spk.count * 22 + 4, 5);
+            ctx.restore();
+        }
+
+        function drawMotobug(enemy) {
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y);
+            const dir = enemy.vx > 0 ? 1 : -1;
+            ctx.scale(dir, 1);
+
+            // Roda inferior girando
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.arc(0, 10, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(enemy.anim) * 7, 10 + Math.sin(enemy.anim) * 7);
+            ctx.lineTo(-Math.cos(enemy.anim) * 7, 10 - Math.sin(enemy.anim) * 7);
+            ctx.stroke();
+
+            // Carapaça vermelha de joaninha
+            ctx.fillStyle = '#dc2626';
+            ctx.beginPath();
+            ctx.arc(0, 4, 18, Math.PI, 0);
+            ctx.fill();
+
+            // Pintas pretas
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(-6, -4, 3.5, 0, Math.PI * 2);
+            ctx.arc(2, -8, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Cabeça metálica e olho bravo
+            ctx.fillStyle = '#334155';
+            ctx.beginPath();
+            ctx.arc(14, 3, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(16, 1, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pinça frontal
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(19, 7);
+            ctx.lineTo(26, 5);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawBuzzBomber(enemy) {
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y);
+            const dir = enemy.vx > 0 ? 1 : -1;
+            ctx.scale(dir, 1);
+
+            // Asas batendo rápido
+            const wingFlap = Math.sin(enemy.anim * 4) * 10;
+            ctx.fillStyle = 'rgba(224, 242, 254, 0.8)';
+            ctx.beginPath();
+            ctx.ellipse(-4, -14 + wingFlap * 0.4, 14, 6, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Abdômen listrado amarelo e preto
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.ellipse(-12, 4, 12, 8, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-14, -2);
+            ctx.lineTo(-10, 10);
+            ctx.stroke();
+
+            // Tórax azul metálico
+            ctx.fillStyle = '#2563eb';
+            ctx.beginPath();
+            ctx.arc(4, 0, 11, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Olho vermelho
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(10, -2, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawFreedAnimal(fa) {
+            ctx.save();
+            ctx.translate(fa.x, fa.y);
+            if (fa.type === 'BIRD') {
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#f97316';
+                ctx.beginPath();
+                ctx.moveTo(7, -2);
+                ctx.lineTo(13, 0);
+                ctx.lineTo(7, 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#f8fafc';
+                ctx.beginPath();
+                ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillRect(-4, -15, 3, 9);
+                ctx.fillRect(1, -15, 3, 9);
+            }
+            ctx.restore();
+        }
+
+        function drawSonic() {
+            // Pisca durante invulnerabilidade pós-dano
+            if (player.invulnTimer > 0 && Math.floor(player.invulnTimer * 18) % 2 === 0) {
+                return;
+            }
+
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.scale(player.facing, 1);
+
+            const isBall = player.state === 'JUMP' || player.state === 'ROLL' || player.state === 'SPINDASH';
+
+            if (isBall) {
+                // Forma de Bola Azul Giratória (Spin Jump / Spin Dash / Spin Roll)
+                const spinAngle = worldTime * (player.state === 'SPINDASH' ? 42 : 28);
+                ctx.rotate(spinAngle);
+
+                // Aura de energia quando em Spin Dash
+                if (player.state === 'SPINDASH') {
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, player.radius + 7, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Corpo esférico azul
+                ctx.fillStyle = '#1d4ed8';
+                ctx.beginPath();
+                ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Espinhos estilizados girando
+                ctx.fillStyle = '#3b82f6';
+                for (let i = 0; i < 5; i++) {
+                    ctx.rotate((Math.PI * 2) / 5);
+                    ctx.beginPath();
+                    ctx.moveTo(10, -6);
+                    ctx.lineTo(player.radius + 5, 0);
+                    ctx.lineTo(10, 6);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Brilho interno
+                ctx.strokeStyle = '#93c5fd';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, player.radius * 0.62, 0, Math.PI * 1.2);
+                ctx.stroke();
+            } else {
+                // Sonic Correndo ou Parado
+                const speedRatio = Math.min(1, Math.abs(player.vx) / 550);
+                const lean = speedRatio * 0.28;
+                const bob = player.state === 'RUN' ? Math.sin(player.animTimer * 2) * 2.5 : Math.sin(worldTime * 5) * 1.5;
+
+                ctx.translate(0, bob);
+                ctx.rotate(lean);
+
+                // Pernas e Tênis Vermelhos Icônicos
+                if (speedRatio > 0.78) {
+                    // Efeito de "roda infinita" nas pernas em velocidade máxima!
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+                    ctx.lineWidth = 6;
+                    ctx.beginPath();
+                    ctx.arc(-2, 12, 9, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(-2, 12, 9, worldTime * 20, worldTime * 20 + 1.5);
+                    ctx.stroke();
+                } else {
+                    const stride = player.state === 'RUN' ? Math.sin(player.animTimer) * 11 : 0;
+                    // Perna traseira
+                    drawSonicShoe(-stride, 14);
+                    // Perna frontal
+                    drawSonicShoe(stride, 14);
+                }
+
+                // Tronco azul e barriga pêssego
+                ctx.fillStyle = '#1d4ed8';
+                ctx.beginPath();
+                ctx.ellipse(-1, 3, 10, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#fed7aa';
+                ctx.beginPath();
+                ctx.ellipse(3, 4, 6, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Luvas brancas
+                const armSwing = player.state === 'RUN' ? -Math.sin(player.animTimer) * 8 : 0;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(armSwing, 4, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Cabeça e os 3 espinhos clássicos para trás
+                ctx.fillStyle = '#2563eb';
+                // Espinho superior
+                ctx.beginPath();
+                ctx.moveTo(-2, -18);
+                ctx.lineTo(-24, -14);
+                ctx.lineTo(-6, -8);
+                ctx.closePath();
+                ctx.fill();
+                // Espinho médio
+                ctx.beginPath();
+                ctx.moveTo(-4, -10);
+                ctx.lineTo(-25, -4);
+                ctx.lineTo(-6, -1);
+                ctx.closePath();
+                ctx.fill();
+                // Espinho inferior
+                ctx.beginPath();
+                ctx.moveTo(-5, -3);
+                ctx.lineTo(-21, 5);
+                ctx.lineTo(-6, 4);
+                ctx.closePath();
+                ctx.fill();
+
+                // Crânio
+                ctx.beginPath();
+                ctx.arc(1, -10, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Focinho pêssego
+                ctx.fillStyle = '#fed7aa';
+                ctx.beginPath();
+                ctx.ellipse(8, -7, 8, 5.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Olho branco e pupila verde esmeralda
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.ellipse(6, -12, 4.5, 6, -0.15, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#16a34a';
+                ctx.beginPath();
+                ctx.ellipse(7.5, -12, 2, 3.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Nariz preto
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(15, -8, 2.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawSonicShoe(offsetX, offsetY) {
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            // Tênis vermelho
+            ctx.fillStyle = '#dc2626';
+            ctx.beginPath();
+            ctx.ellipse(2, 2, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Faixa branca clássica
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-1, -2, 4, 8);
+            // Fivela dourada
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(1, 0, 3, 3);
+            ctx.restore();
+        }
+
+        function drawSpeedLines() {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 8; i++) {
+                const y = ((i * 73 + worldTime * 200) % VIRTUAL_HEIGHT);
+                const x = virtualWidth - ((worldTime * 1400 + i * 190) % (virtualWidth + 200));
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 95, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawZoneBanner() {
+            const alpha = Math.min(1, zoneBannerTimer * 1.5);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(virtualWidth * 0.5, VIRTUAL_HEIGHT * 0.34);
+
+            // Triângulo vermelho clássico
+            ctx.fillStyle = '#dc2626';
+            ctx.beginPath();
+            ctx.moveTo(-140, -45);
+            ctx.lineTo(140, -45);
+            ctx.lineTo(110, 45);
+            ctx.lineTo(-170, 45);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            ctx.font = 'bold 22px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText('GREEN HILL', -12, -4);
+
+            ctx.font = 'bold 14px "Press Start 2P", monospace';
+            ctx.fillStyle = '#facc15';
+            ctx.fillText('ZONA 1 • ATO 1', -12, 26);
+
+            ctx.restore();
+        }
+
+        // ----------------------------------------------------------------------------
+        // 9. ATUALIZAÇÃO DO HUD E CONTROLE DE FLUXO DE TELAS
+        // ----------------------------------------------------------------------------
+        const hudLayer = document.getElementById('hudLayer');
+        const hudRings = document.getElementById('hudRings');
+        const hudScore = document.getElementById('hudScore');
+        const hudSpeedBar = document.getElementById('hudSpeedBar');
+
+        const startScreen = document.getElementById('startScreen');
+        const pauseScreen = document.getElementById('pauseScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+
+        document.getElementById('startHighScore').textContent = `RECORDE: ${String(highScore).padStart(6, '0')} PTS`;
+
+        function updateHUD() {
+            hudRings.textContent = rings;
+            if (rings === 0) {
+                hudRings.classList.add('rings-zero');
+            } else {
+                hudRings.classList.remove('rings-zero');
+            }
+
+            hudScore.textContent = String(Math.floor(score)).padStart(6, '0');
+
+            const speedPct = Math.min(100, Math.round((Math.abs(player.vx) / 760) * 100));
+            hudSpeedBar.style.width = `${speedPct}%`;
+        }
+
+        function startGame() {
+            sound.init();
+            startScreen.classList.add('hidden');
+            pauseScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            hudLayer.classList.remove('hidden');
+            resetWorld();
+            gameState = 'PLAYING';
+        }
+
+        function pauseGame() {
+            if (gameState !== 'PLAYING') return;
+            gameState = 'PAUSED';
+            pauseScreen.classList.remove('hidden');
+        }
+
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            pauseScreen.classList.add('hidden');
+            lastTimestamp = performance.now();
+            gameState = 'PLAYING';
+        }
+
+        function triggerGameOver(reason) {
+            gameState = 'GAMEOVER';
+            hudLayer.classList.add('hidden');
+            gameOverScreen.classList.remove('hidden');
+
+            const finalPts = Math.floor(score);
+            if (finalPts > highScore) {
+                highScore = finalPts;
+                localStorage.setItem('sonicRunnerHighScore', String(highScore));
+            }
+
+            document.getElementById('gameOverReason').textContent = reason;
+            document.getElementById('finalScore').textContent = String(finalPts).padStart(6, '0');
+            document.getElementById('finalDistance').textContent = `${distanceMeters} m`;
+            document.getElementById('finalHighScore').textContent = String(highScore).padStart(6, '0');
+        }
+
+        // Eventos dos botões de interface
+        document.getElementById('btnStartGame').addEventListener('click', startGame);
+        document.getElementById('btnRestartGame').addEventListener('click', startGame);
+        document.getElementById('btnRestartFromPause').addEventListener('click', startGame);
+        document.getElementById('btnPause').addEventListener('click', pauseGame);
+        document.getElementById('btnResume').addEventListener('click', resumeGame);
+
+        document.getElementById('btnMute').addEventListener('click', () => {
+            sound.init();
+            const isMuted = sound.toggleMute();
+            document.getElementById('iconSoundOn').classList.toggle('hidden', isMuted);
+            document.getElementById('iconSoundOff').classList.toggle('hidden', !isMuted);
+        });
+
+        // ----------------------------------------------------------------------------
+        // 10. LOOP PRINCIPAL DE ANIMAÇÃO (60 FPS)
+        // ----------------------------------------------------------------------------
+        let lastTimestamp = 0;
+
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
+            lastTimestamp = timestamp;
+
+            if (gameState === 'START') {
+                // Animação suave de fundo na tela inicial
+                worldTime += dt;
+                cameraX += 90 * dt;
+                while (nextChunkX < cameraX + virtualWidth + 1200) {
+                    generateNextChunk();
+                }
+            } else {
+                update(dt);
+            }
+
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = function () {
+            resetWorld();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
